@@ -1,0 +1,19 @@
+name = "bunny-planner"
+main = "src/worker.js"
+compatibility_date = "2026-01-01"
+
+# Serves web/index.html at your Worker address. Files matching web/ are served directly;
+# /chat, /mcp and /health go to the Worker. (Per Cloudflare static-assets docs.)
+[assets]
+directory = "./web"
+
+# Optional persistence: create a free KV namespace in the Cloudflare dashboard, copy its ID,
+# then uncomment the three lines below and paste the ID.
+# Without this binding the server still works but keeps tasks in memory only.
+# [[kv_namespaces]]
+# binding = "TASKS"
+# id = "PASTE_NAMESPACE_ID_HERE"
+
+# Optional: only allow browser calls from your own site (comma separated).
+# [vars]
+# ALLOWED_ORIGINS = "https://your-site.pages.dev"

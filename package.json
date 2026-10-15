@@ -1,0 +1,11 @@
+{
+  "name": "bunny-planner",
+  "version": "0.1.0",
+  "description": "MCP server (Streamable HTTP) for a daily-planning bunny companion",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "start": "node src/node.js",
+    "test": "node test/test.mjs && node test/chat.test.mjs && node test/kv.test.mjs && node test/web.test.mjs"
+  }
+}
