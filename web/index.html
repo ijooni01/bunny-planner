@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#DCE7E1">
+<title>Bunny Planner</title>
+<style>
+:root{--bg:#EAF1ED;--ink:#49362F;--ink2:#6B5A52;--mint:#B8DCCB;--btn:#3F7A63;--cream:#FFF4E5;--card:#fff;--line:#CCDAD2;--tile:#DCE7E1}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{display:flex;flex-direction:column;height:100dvh;background:var(--bg);color:var(--ink);font:16px/1.5 ui-rounded,"Nunito","Segoe UI",system-ui,sans-serif;padding-top:env(safe-area-inset-top,0px)}
+header{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
+h1{font-size:18px;margin:0;flex:1;font-weight:800}
+#mode{font-size:12px;color:var(--ink2)}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+#gear{background:none;border:1px solid var(--line);border-radius:10px;padding:4px 10px;font-size:13px}
+#banner,#settings{padding:10px 14px;background:#FCEBD9;border-bottom:1px solid var(--line);font-size:14px}
+#settings{background:var(--card)}
+#settings label{display:block;font-size:13px;color:var(--ink2);margin-bottom:4px}
+#settings .r{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+#settings input{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.sm{padding:6px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;font-size:14px}
+#log{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:8px}
+.m{max-width:85%;padding:9px 13px;border-radius:16px;white-space:pre-wrap;overflow-wrap:anywhere}
+.u{align-self:flex-end;background:var(--mint);border-bottom-right-radius:4px}
+.b{align-self:flex-start;background:var(--card);border:1px solid var(--line);border-bottom-left-radius:4px}
+#dock{display:flex;align-items:flex-end;gap:10px;padding:8px 12px calc(10px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);background:var(--bg)}
+#bun{flex:none;width:96px;background:var(--tile);border-radius:14px;padding:4px 0 2px}
+#br{transform-origin:50% 100%;animation:br 3.4s ease-in-out infinite}
+#sv{display:block;margin:0 auto}
+.pop{animation:pop .22s ease-out}.bn{animation:bn .55s ease-out 2}
+@keyframes br{0%,100%{transform:scaleY(1)}50%{transform:scaleY(1.018)}}
+@keyframes pop{0%{transform:scale(.95)}100%{transform:scale(1)}}
+@keyframes bn{0%,100%{transform:translateY(0)}40%{transform:translateY(-8px)}}
+.side{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+#chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+#chips button{flex:none;font-size:13px;padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:#fff}
+#f{display:flex;gap:6px}
+#t{flex:1;min-width:0;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:#fff;font-size:16px}
+#go{padding:10px 16px;border:0;border-radius:12px;background:var(--btn);color:#fff;font-weight:700}
+#go:disabled{opacity:.55;cursor:default}
+:focus-visible{outline:3px solid #2B6CB0;outline-offset:2px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+@media (prefers-reduced-motion:reduce){#br,.pop,.bn{animation:none}}
+</style>
+</head>
+<body>
+<header><h1>Bunny Planner</h1><span id="mode">Connecting...</span><button id="gear" type="button" aria-expanded="false" aria-controls="settings">Settings</button></header>
+<div id="banner" role="alert" hidden></div>
+<section id="settings" hidden>
+  <label for="api">Server address (leave empty to use this site)</label>
+  <input id="api" type="url" inputmode="url" placeholder="https://bunny-planner.your-name.workers.dev" autocomplete="off">
+  <div class="r"><button class="sm" id="saveApi" type="button">Save address</button><button class="sm" id="newSess" type="button">Start a new session</button></div>
+  <p id="setMsg" style="font-size:13px;margin:8px 0 0;color:var(--ink2)"></p>
+</section>
+<main id="log" aria-live="polite" aria-label="Conversation"></main>
+<footer id="dock">
+  <div id="bun"><div id="br"><svg id="sv" viewBox="0 -4 114 156" width="96" role="img" aria-label="Bunny companion"></svg></div></div>
+  <div class="side">
+    <div id="chips"></div>
+    <form id="f" autocomplete="off"><label class="sr" for="t">Message</label><input id="t" placeholder="Tell the bunny..." maxlength="500" enterkeyhint="send"><button id="go" type="submit">Send</button></form>
+  </div>
+</footer>
+<script>
+/* ===== Bunny character (same shared parts for every expression) ===== */
+const BODY='<ellipse cx="50" cy="148" rx="28" ry="4" fill="#000" opacity="0.08"/><circle cx="75" cy="132" r="10" fill="#E9DDCE"/><circle cx="73" cy="130" r="9" fill="#FFF4E5"/><ellipse cx="52" cy="114" rx="27" ry="31" fill="#E9DDCE"/><ellipse cx="49" cy="112" rx="26" ry="30" fill="#FFF4E5"/><ellipse cx="50" cy="117" rx="14" ry="17" fill="#FFFAF2"/><ellipse cx="37" cy="143.5" rx="11" ry="6" fill="#E9DDCE"/><ellipse cx="63" cy="143.5" rx="11" ry="6" fill="#E9DDCE"/><ellipse cx="37" cy="142" rx="11" ry="6" fill="#FFF4E5"/><ellipse cx="63" cy="142" rx="11" ry="6" fill="#FFF4E5"/>';
+const HEAD='<ellipse cx="51" cy="70" rx="32" ry="28" fill="#E9DDCE"/><ellipse cx="50" cy="68" rx="32" ry="28" fill="#FFF4E5"/><ellipse cx="51" cy="76" rx="11" ry="7.5" fill="#FFFAF2"/><circle cx="32" cy="76" r="6" fill="#F5C3C5" opacity="0.75"/><circle cx="69" cy="76" r="6" fill="#F5C3C5" opacity="0.75"/><ellipse cx="51" cy="72" rx="3.2" ry="2.4" fill="#F2A9B8"/>';
+const BOW='<path d="M51 98 L36 90 L36 106 Z" fill="#B8DCCB"/><path d="M51 98 L66 90 L66 106 Z" fill="#B8DCCB"/><path d="M51 98 L36 98 L36 106 Z" fill="#9CC7B3" opacity="0.6"/><path d="M51 98 L66 98 L66 106 Z" fill="#9CC7B3" opacity="0.6"/><circle cx="51" cy="98" r="4.2" fill="#9CC7B3"/>';
+const ear=(cx,r,dy)=>`<g transform="translate(0 ${dy}) rotate(${r} ${cx} 44)"><ellipse cx="${cx}" cy="24" rx="9.5" ry="27" fill="#E9DDCE"/><ellipse cx="${cx-.5}" cy="25" rx="9" ry="26.5" fill="#FFF4E5"/><ellipse cx="${cx}" cy="28" rx="5" ry="19" fill="#F3B9C5"/></g>`;
+const arm=d=>`<path d="${d}" fill="none" stroke="#E9DDCE" stroke-width="13" stroke-linecap="round" transform="translate(0 1.5)"/><path d="${d}" fill="none" stroke="#FFF4E5" stroke-width="12" stroke-linecap="round"/>`;
+const AL='<ellipse cx="29" cy="114" rx="6.5" ry="13" fill="#E9DDCE" transform="rotate(10 29 114)"/><ellipse cx="28" cy="112" rx="6.5" ry="13" fill="#FFF4E5" transform="rotate(10 28 112)"/>';
+const AR='<ellipse cx="73" cy="114" rx="6.5" ry="13" fill="#E9DDCE" transform="rotate(-10 73 114)"/><ellipse cx="72" cy="112" rx="6.5" ry="13" fill="#FFF4E5" transform="rotate(-10 72 112)"/>';
+const CL='<ellipse cx="41" cy="109" rx="6.5" ry="11" fill="#E9DDCE" transform="rotate(-25 41 109)"/><ellipse cx="40" cy="107" rx="6.5" ry="11" fill="#FFF4E5" transform="rotate(-25 40 107)"/><ellipse cx="61" cy="109" rx="6.5" ry="11" fill="#E9DDCE" transform="rotate(25 61 109)"/><ellipse cx="60" cy="107" rx="6.5" ry="11" fill="#FFF4E5" transform="rotate(25 60 107)"/>';
+const ARMS={down:AL+AR,up:arm('M30 103 Q10 97 12 64')+arm('M72 103 Q92 97 90 64'),half:arm('M30 104 Q15 100 18 84')+arm('M72 104 Q87 100 84 84'),rightUp:AL+arm('M72 104 Q91 98 90 76'),clasp:CL};
+const eo=(rx,ry,dx,dy)=>`<ellipse cx="${40+dx}" cy="${63+dy}" rx="${rx}" ry="${ry}" fill="#49362F"/><ellipse cx="${60+dx}" cy="${63+dy}" rx="${rx}" ry="${ry}" fill="#49362F"/><circle cx="${42+dx}" cy="${60+dy}" r="2.3" fill="#fff"/><circle cx="${62+dx}" cy="${60+dy}" r="2.3" fill="#fff"/><circle cx="${38.5+dx}" cy="${66+dy}" r="1.1" fill="#fff"/><circle cx="${58.5+dx}" cy="${66+dy}" r="1.1" fill="#fff"/>`;
+const ln=d=>`<path d="${d}" fill="none" stroke="#49362F" stroke-width="1.7" stroke-linecap="round"/>`;
+const EYES={open:eo(5.8,7.2,0,0),wide:eo(6.3,8,0,0),look:eo(5.8,7.2,1.5,-1.5),closed:ln('M34 64 Q40 69 46 64 M54 64 Q60 69 66 64'),arc:ln('M34 65 Q40 56 46 65 M54 65 Q60 56 66 65'),half:'<path d="M34.5 65 A5.8 4 0 0 0 45.5 65 Z M54.5 65 A5.8 4 0 0 0 65.5 65 Z" fill="#49362F"/>'+ln('M34 65 H46 M54 65 H66')};
+const BR={curious:'M33 52 Q39 48 45 51.5 M57 52.5 Q62 51 67 53',confused:'M33 51 Q39 46 45 50 M56 54 Q61 53 67 55',concerned:'M33 55 Q38 53 45 49.5 M55 49.5 Q62 53 67 55'};
+const MO={smile:ln('M51 74.5 V78 M46 79.5 Q51 84 56 79.5'),smile2:ln('M51 74.5 V77.5 M45.5 78.5 Q51 85 56.5 78.5'),neutral:ln('M51 74.5 V78 M47.5 80 Q51 82 54.5 80'),tiny:ln('M51 74.5 V78 M48 80.5 Q51 82 54 80.5'),frown:ln('M51 74.5 V78 M47 82.5 Q51 79.5 55 82.5'),wavy:ln('M51 74.5 V78 M45.5 81 Q48 78.5 51 81 Q54 83.5 56.5 80.5'),pursed:ln('M51 74.5 V78')+'<ellipse cx="51" cy="81.5" rx="2.6" ry="2.9" fill="none" stroke="#49362F" stroke-width="1.5"/>',open:'<path d="M51 74.5 V78 M44.5 79.5 Q51 82 57.5 79.5 Q56 90 51 90 Q46 90 44.5 79.5 Z" fill="#B8606E" stroke="#49362F" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>'};
+const BUB='<circle cx="80" cy="46" r="2.2" fill="#fff" stroke="#BFD0C7" stroke-width="0.8"/><rect x="84" y="20" width="28" height="18" rx="9" fill="#fff" stroke="#BFD0C7" stroke-width="0.8"/>'+[91,98,105].map((x,i)=>`<circle cx="${x}" cy="29" r="2.4" fill="#49362F"><animate attributeName="opacity" values="0.25;1;0.25" dur="1.2s" begin="${i*.2}s" repeatCount="indefinite"/></circle>`).join('');
+const SPK='<circle cx="6" cy="40" r="2.5" fill="#B8DCCB"/><circle cx="104" cy="34" r="2.5" fill="#F3B9C5"/><circle cx="108" cy="56" r="2" fill="#B8DCCB"/><circle cx="4" cy="62" r="2" fill="#F3B9C5"/>';
+const E={
+idle:{e:[-7,10,0],y:'open',m:'smile',a:'down'},
+blink:{e:[-7,10,0],y:'closed',m:'smile',a:'down'},
+listening:{e:[-3,3,-3],y:'wide',m:'neutral',a:'down'},
+thinking:{e:[-4,16,0],y:'look',b:'curious',m:'pursed',a:'down',t:-5,bub:1},
+happy:{e:[-5,7,0],y:'open',m:'smile2',a:'down',ch:1},
+excited:{e:[-6,6,-4],y:'wide',m:'open',a:'half',spk:1},
+confused:{e:[-20,4,0],y:'open',b:'confused',m:'wavy',a:'down',t:7},
+concerned:{e:[-16,16,2],y:'open',b:'concerned',m:'frown',a:'clasp'},
+encouraging:{e:[-4,6,0],y:'open',m:'smile2',a:'rightUp'},
+celebrating:{e:[-3,3,0],y:'arc',m:'open',a:'up',spk:1,bn:1},
+sleepy:{e:[-38,38,6],y:'half',m:'tiny',a:'down',t:3,z:1}};
+function build(k){const c=E[k];
+return BODY+ARMS[c.a]+`<g transform="rotate(${c.t||0} 50 92)">`+ear(38,c.e[0],c.e[2])+ear(62,c.e[1],c.e[2])+HEAD+(c.ch?'<circle cx="32" cy="76" r="7.5" fill="#F5C3C5" opacity="0.35"/><circle cx="69" cy="76" r="7.5" fill="#F5C3C5" opacity="0.35"/>':'')+EYES[c.y]+(c.b?`<path d="${BR[c.b]}" fill="none" stroke="#C9B29B" stroke-width="1.6" stroke-linecap="round"/>`:'')+MO[c.m]+'</g>'+BOW+(c.bub?BUB:'')+(c.spk?SPK:'')+(c.z?'<text x="88" y="40" font-size="12" fill="#6b7f77" font-family="sans-serif">z z</text>':'');}
+
+/* ===== App ===== */
+const $=i=>document.getElementById(i);
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+const newSid=()=>(window.crypto&&crypto.randomUUID?crypto.randomUUID().replace(/-/g,''):(Math.random().toString(36).slice(2)+Date.now().toString(36)+'bunny'));
+let sid=store.get('bp_sid');
+if(!/^[A-Za-z0-9_-]{8,64}$/.test(sid||'')){sid=newSid();store.set('bp_sid',sid);}
+const qApi=new URLSearchParams(location.search).get('api');
+if(qApi!==null){store.set('bp_api',qApi.replace(/\/+$/,''));}
+let base=store.get('bp_api')||'';
+let busy=false,cur='idle',hold;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+function mood(k,quiet){cur=k;const s=$('sv');s.innerHTML=build(k);if(!quiet){s.classList.remove('pop','bn');void s.getBoundingClientRect();s.classList.add(E[k].bn?'bn':'pop');}}
+function add(text,who){const d=document.createElement('div');d.className='m '+who;d.textContent=text;$('log').appendChild(d);$('log').scrollTop=$('log').scrollHeight;}
+function banner(t){$('banner').hidden=!t;$('banner').textContent=t||'';}
+function setBusy(b){$('go').disabled=b;$('t').disabled=b;}
+
+async function health(){
+  try{const r=await fetch(base+'/health',{cache:'no-store'});const j=await r.json();
+    $('mode').textContent=j.ai&&j.ai.length?'AI: '+j.ai.join(', '):'Offline brain (no AI key)';banner(null);return true;}
+  catch(e){$('mode').textContent='Not connected';banner("Can't reach the server. Open Settings and enter your server address.");return false;}
+}
+
+async function send(text){
+  text=text.trim();if(!text||busy)return;
+  add(text,'u');$('t').value='';busy=true;setBusy(true);clearTimeout(hold);mood('thinking');
+  const t0=Date.now();let j,net=false;
+  try{
+    const r=await fetch(base+'/chat',{method:'POST',headers:{'content-type':'application/json','x-session-id':sid,'x-tz-offset-minutes':String(-new Date().getTimezoneOffset())},body:JSON.stringify({message:text}),signal:window.AbortSignal&&AbortSignal.timeout?AbortSignal.timeout(20000):undefined});
+    j=await r.json().catch(()=>null);
+    if(!j||typeof j.reply!=='string')j={reply:'The server sent something I could not read. Please try again.',mood:'concerned'};
+  }catch(e){net=true;j={reply:"I can't reach the server. Check the server address in Settings, then try again.",mood:'concerned'};}
+  await sleep(Math.max(0,600-(Date.now()-t0)));
+  add(j.reply,'b');busy=false;setBusy(false);$('t').focus();
+  mood(E[j.mood]?j.mood:'idle');
+  if(net){banner("Can't reach the server. Open Settings and enter your server address.");$('mode').textContent='Not connected';}
+  else{banner(null);if(j.mode==='scripted')$('mode').textContent=j.degraded?'AI unavailable, using offline brain':'Offline brain (no AI key)';else if(j.mode&&j.mode!=='error')$('mode').textContent='AI: '+j.mode;}
+  hold=setTimeout(()=>{if(!busy)mood('idle');},j.mood==='sleepy'?9000:4500);
+}
+
+[['Add task','add ',1],['Plan my day','plan my day'],['Finished one','finished ',1],['My streak','how is my streak'],['Help','help']].forEach(([label,msg,fill])=>{
+  const b=document.createElement('button');b.type='button';b.textContent=label;
+  b.onclick=()=>{if(fill){const t=$('t');t.value=msg;t.focus();mood('listening');}else send(msg);};
+  $('chips').appendChild(b);});
+$('f').addEventListener('submit',e=>{e.preventDefault();send($('t').value);});
+$('t').addEventListener('input',()=>{if(!busy)mood($('t').value?'listening':'idle');});
+$('t').addEventListener('blur',()=>{if(!busy&&cur==='listening')mood('idle');});
+
+$('gear').onclick=()=>{const s=$('settings');s.hidden=!s.hidden;$('gear').setAttribute('aria-expanded',String(!s.hidden));$('api').value=base;};
+$('saveApi').onclick=async()=>{
+  const v=$('api').value.trim().replace(/\/+$/,'');
+  if(v&&!/^https?:\/\/[^\s]+$/i.test(v)){$('setMsg').textContent='The address must start with https:// (or http:// for local testing).';return;}
+  base=v;store.set('bp_api',v);$('setMsg').textContent='Checking...';
+  $('setMsg').textContent=(await health())?'Connected.':'Saved, but the server did not answer.';};
+$('newSess').onclick=()=>{sid=newSid();store.set('bp_sid',sid);$('log').textContent='';add('Fresh start! What would you like to get done today?','b');$('setMsg').textContent='New session started. Your old tasks stay on the server under the old session.';};
+
+setInterval(()=>{if(!busy&&['idle','listening','encouraging','happy'].includes(cur)){const k=cur;mood('blink',true);setTimeout(()=>{if(cur==='blink')mood(k,true);},140);}},3600);
+add("Hi! I'm your planner bunny. Tell me what you want to get done today, like \"add study math for 45 min\", or tap a button below.",'b');
+mood('idle');health();
+if(typeof __expose==='function')__expose({E,build,send,mood,health,get cur(){return cur},get sid(){return sid},get base(){return base}});
+</script>
+</body>
+</html>
