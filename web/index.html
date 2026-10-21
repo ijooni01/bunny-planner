@@ -15,7 +15,12 @@ h1{font-size:18px;margin:0;flex:1;font-weight:800}
 #mode{font-size:12px;color:var(--ink2)}
 button,input{font:inherit;color:inherit}
 button{cursor:pointer}
-#gear{background:none;border:1px solid var(--line);border-radius:10px;padding:4px 10px;font-size:13px}
+#gear,#mcpBtn{background:none;border:1px solid var(--line);border-radius:10px;padding:4px 10px;font-size:13px}
+#mcp{padding:10px 14px;background:var(--card);border-bottom:1px solid var(--line);font-size:14px;max-height:42dvh;overflow:auto}
+#mcp .r{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+#mcp select,#mcp textarea{font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--line);border-radius:10px;background:#fff;color:inherit;max-width:100%}
+#mcp textarea{width:100%;font-family:ui-monospace,monospace}
+#mOut{font:12px/1.4 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere;margin:6px 0 0;background:#F4F7F5;border-radius:10px;padding:8px;max-height:20dvh;overflow:auto}
 #banner,#settings{padding:10px 14px;background:#FCEBD9;border-bottom:1px solid var(--line);font-size:14px}
 #settings{background:var(--card)}
 #settings label{display:block;font-size:13px;color:var(--ink2);margin-bottom:4px}
@@ -47,13 +52,21 @@ button{cursor:pointer}
 </style>
 </head>
 <body>
-<header><h1>Bunny Planner</h1><span id="mode">Connecting...</span><button id="gear" type="button" aria-expanded="false" aria-controls="settings">Settings</button></header>
+<header><h1>Bunny Planner</h1><span id="mode">Connecting...</span><button id="mcpBtn" type="button" aria-expanded="false" aria-controls="mcp">MCP</button><button id="gear" type="button" aria-expanded="false" aria-controls="settings">Settings</button></header>
 <div id="banner" role="alert" hidden></div>
 <section id="settings" hidden>
   <label for="api">Server address (leave empty to use this site)</label>
   <input id="api" type="url" inputmode="url" placeholder="https://bunny-planner.your-name.workers.dev" autocomplete="off">
   <div class="r"><button class="sm" id="saveApi" type="button">Save address</button><button class="sm" id="newSess" type="button">Start a new session</button></div>
   <p id="setMsg" style="font-size:13px;margin:8px 0 0;color:var(--ink2)"></p>
+</section>
+<section id="mcp" hidden aria-label="MCP client">
+  <div>This page talks to <code>/mcp</code> as an MCP client (Streamable HTTP, protocol 2025-11-25).</div>
+  <div class="r"><button class="sm" id="mInit" type="button">Initialize</button><button class="sm" id="mList" type="button">List tools</button></div>
+  <div class="r"><select id="mTool" aria-label="Tool"></select><button class="sm" id="mCall" type="button">Call tool</button></div>
+  <label for="mArgs" style="font-size:13px;color:var(--ink2)">Arguments (JSON)</label>
+  <textarea id="mArgs" rows="2" spellcheck="false">{}</textarea>
+  <pre id="mOut" aria-live="polite"></pre>
 </section>
 <main id="log" aria-live="polite" aria-label="Conversation"></main>
 <footer id="dock">
@@ -148,14 +161,86 @@ $('gear').onclick=()=>{const s=$('settings');s.hidden=!s.hidden;$('gear').setAtt
 $('saveApi').onclick=async()=>{
   const v=$('api').value.trim().replace(/\/+$/,'');
   if(v&&!/^https?:\/\/[^\s]+$/i.test(v)){$('setMsg').textContent='The address must start with https:// (or http:// for local testing).';return;}
-  base=v;store.set('bp_api',v);$('setMsg').textContent='Checking...';
+  base=v;store.set('bp_api',v);mcpReset();$('setMsg').textContent='Checking...';
   $('setMsg').textContent=(await health())?'Connected.':'Saved, but the server did not answer.';};
 $('newSess').onclick=()=>{sid=newSid();store.set('bp_sid',sid);$('log').textContent='';add('Fresh start! What would you like to get done today?','b');$('setMsg').textContent='New session started. Your old tasks stay on the server under the old session.';};
+
+/* ===== Minimal MCP client (Streamable HTTP, protocol 2025-11-25) ===== */
+const MCP_VER='2025-11-25';
+const SAMPLE={add_task:'{"title":"Read chapter 3","minutes":45}',plan_day:'{}',complete_task:'{"title":"read"}',get_streak:'{}'};
+let mcpInit=false,mcpVer=MCP_VER,mcpSession=null,mcpId=0,mcpInitP=null;
+function show(t){const o=$('mOut');o.textContent=(o.textContent+t+'\n').slice(-6000);o.scrollTop=o.scrollHeight;}
+async function mcpPost(msg){
+  const h={'content-type':'application/json','accept':'application/json, text/event-stream','x-session-id':sid,'x-tz-offset-minutes':String(-new Date().getTimezoneOffset())};
+  if(mcpInit)h['mcp-protocol-version']=mcpVer;
+  if(mcpSession)h['mcp-session-id']=mcpSession;
+  const r=await fetch(base+'/mcp',{method:'POST',headers:h,body:JSON.stringify(msg)});
+  const sess=r.headers.get('mcp-session-id');if(sess)mcpSession=sess;
+  return r;
+}
+async function mcpRead(r,id){
+  const txt=await r.text();
+  if((r.headers.get('content-type')||'').includes('text/event-stream')){
+    for(const block of txt.split(/\n\n+/)){
+      const data=block.split('\n').filter(l=>l.startsWith('data:')).map(l=>l.slice(5).trimStart()).join('\n');
+      if(!data)continue;
+      try{const m=JSON.parse(data);if(m.id===id)return m;}catch(e){}
+    }
+    throw new Error('No reply found in the event stream.');
+  }
+  try{return JSON.parse(txt);}catch(e){throw new Error('Server answered HTTP '+r.status+' without JSON.');}
+}
+async function mcpRpc(method,params){
+  const id=++mcpId,msg={jsonrpc:'2.0',id,method};
+  if(params!==undefined)msg.params=params;
+  show('-> '+JSON.stringify(msg));
+  const r=await mcpPost(msg),out=await mcpRead(r,id);
+  show('<- HTTP '+r.status+' '+JSON.stringify(out));
+  if(out.error)throw new Error(out.error.message+' (code '+out.error.code+')');
+  return out.result;
+}
+function mcpEnsure(){
+  if(mcpInit)return Promise.resolve();
+  if(!mcpInitP)mcpInitP=(async()=>{
+    const res=await mcpRpc('initialize',{protocolVersion:MCP_VER,capabilities:{},clientInfo:{name:'bunny-planner-web',version:'0.1.0'}});
+    if(!res||res.protocolVersion!==MCP_VER)throw new Error('Server chose protocol '+(res&&res.protocolVersion)+', this page needs '+MCP_VER+'.');
+    mcpVer=res.protocolVersion;mcpInit=true;
+    const n=await mcpPost({jsonrpc:'2.0',method:'notifications/initialized'});
+    show('-> notifications/initialized   <- HTTP '+n.status);
+    if(n.status!==202)throw new Error('Expected HTTP 202 for the initialized notification, got '+n.status+'.');
+  })().catch(e=>{mcpInit=false;mcpInitP=null;throw e;});
+  return mcpInitP;
+}
+const mErr=e=>show('Error: '+(e&&e.message?e.message:e));
+function mcpReset(){mcpInit=false;mcpInitP=null;mcpSession=null;}
+$('mcpBtn').onclick=()=>{const s=$('mcp');s.hidden=!s.hidden;$('mcpBtn').setAttribute('aria-expanded',String(!s.hidden));};
+$('mInit').onclick=()=>mcpEnsure().then(()=>show('Ready. Protocol '+mcpVer)).catch(mErr);
+$('mTool').onchange=()=>{$('mArgs').value=SAMPLE[$('mTool').value]||'{}';};
+$('mList').onclick=async()=>{
+  try{await mcpEnsure();let tools=[],cursor;
+    do{const r=await mcpRpc('tools/list',cursor?{cursor}:{});tools=tools.concat(r.tools||[]);cursor=r.nextCursor;}while(cursor);
+    $('mTool').innerHTML='';
+    tools.forEach(t=>{const o=document.createElement('option');o.value=t.name;o.textContent=t.name;$('mTool').appendChild(o);});
+    if(tools.length){$('mTool').value=tools[0].name;$('mTool').onchange();}
+    show('Found '+tools.length+' tools: '+tools.map(t=>t.name).join(', '));
+  }catch(e){mErr(e);}
+};
+$('mCall').onclick=async()=>{
+  let args;try{args=JSON.parse($('mArgs').value||'{}');}catch(e){show('Error: the arguments are not valid JSON.');return;}
+  if(!args||typeof args!=='object'||Array.isArray(args)){show('Error: the arguments must be a JSON object, like {}.');return;}
+  if(!$('mTool').value){show('Press "List tools" first, then pick a tool.');return;}
+  try{await mcpEnsure();
+    const r=await mcpRpc('tools/call',{name:$('mTool').value,arguments:args});
+    show('Result: '+(r.content&&r.content[0]?r.content[0].text:'(no text)')+(r.isError?'   [tool reported an error]':''));
+    const m=r.structuredContent&&r.structuredContent.mood;
+    if(m&&E[m]){mood(m);clearTimeout(hold);hold=setTimeout(()=>{if(!busy)mood('idle');},4500);}
+  }catch(e){mErr(e);}
+};
 
 setInterval(()=>{if(!busy&&['idle','listening','encouraging','happy'].includes(cur)){const k=cur;mood('blink',true);setTimeout(()=>{if(cur==='blink')mood(k,true);},140);}},3600);
 add("Hi! I'm your planner bunny. Tell me what you want to get done today, like \"add study math for 45 min\", or tap a button below.",'b');
 mood('idle');health();
-if(typeof __expose==='function')__expose({E,build,send,mood,health,get cur(){return cur},get sid(){return sid},get base(){return base}});
+if(typeof __expose==='function')__expose({E,build,send,mood,health,mcpEnsure,mcpRpc,get mcpVer(){return mcpVer},get mcpInit(){return mcpInit},get cur(){return cur},get sid(){return sid},get base(){return base}});
 </script>
 </body>
 </html>
